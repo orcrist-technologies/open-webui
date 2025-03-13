@@ -354,9 +354,11 @@
 		console.log('JSON schema updated in MessageInput:', jsonSchema);
 		
 		// Save to global storage for persistence
-		if (jsonSchema) {
+		if (jsonSchema && jsonSchema.trim() !== '') {
 			localStorage.setItem('ollama-json-schema', jsonSchema);
 		} else {
+			// Clear the schema if empty
+			jsonSchema = '';
 			localStorage.removeItem('ollama-json-schema');
 		}
 		

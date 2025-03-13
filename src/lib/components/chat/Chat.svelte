@@ -1387,10 +1387,16 @@
 		await sendPrompt(history, userPrompt, userMessageId, { newChat: true });
 
 		// Save JSON schema to localStorage for this chat
-		if (jsonSchema) {
+		if (jsonSchema && jsonSchema.trim() !== '') {
 			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
 			localStorage.setItem('ollama-json-schema', jsonSchema);
 			console.log('Saved JSON schema for chat:', jsonSchema);
+		} else {
+			// Clear the schema if empty
+			jsonSchema = '';
+			localStorage.removeItem(`jsonSchema_${$chatId}`);
+			localStorage.removeItem('ollama-json-schema');
+			console.log('Removed JSON schema from localStorage');
 		}
 	};
 
@@ -2031,13 +2037,16 @@
 		console.log('JSON schema updated:', jsonSchema);
 		
 		// Save to both chat-specific and global storage
-		if (jsonSchema) {
+		if (jsonSchema && jsonSchema.trim() !== '') {
 			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
 			localStorage.setItem('ollama-json-schema', jsonSchema);
 			console.log('Saved JSON schema to localStorage for chat:', $chatId, jsonSchema);
 		} else {
+			// Clear the schema if empty
+			jsonSchema = '';
 			localStorage.removeItem(`jsonSchema_${$chatId}`);
 			localStorage.removeItem('ollama-json-schema');
+			console.log('Removed JSON schema from localStorage');
 		}
 	};
 

@@ -55,6 +55,12 @@
     errorMessage = error;
     
     if (isValid) {
+      // If the schema is empty, treat it as a clear operation
+      if (jsonSchema.trim() === '') {
+        handleClear();
+        return;
+      }
+      
       // Save to localStorage with chat-specific key
       if (chatId) {
         console.log(`Saving JSON schema to localStorage for chat ${chatId}:`, jsonSchema);
@@ -74,6 +80,26 @@
       show = false;
       toast.success('JSON Schema saved successfully');
     }
+  }
+  
+  function handleClear() {
+    // Clear the schema
+    jsonSchema = '';
+    jsonSchemaInput = '';
+    
+    // Remove from localStorage
+    if (chatId) {
+      localStorage.removeItem(`jsonSchema_${chatId}`);
+    }
+    localStorage.removeItem('ollama-json-schema');
+    
+    // Notify parent components
+    dispatch('change', { jsonSchema: '' });
+    dispatch('jsonSchemaChange', { jsonSchema: '' });
+    dispatch('save', { jsonSchema: '' });
+    dispatch('close');
+    show = false;
+    toast.success('JSON Schema cleared successfully');
   }
   
   function handleClose() {
@@ -166,6 +192,12 @@
     </div>
     
     <div class="flex justify-end space-x-2">
+      <button
+        class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-md"
+        on:click={handleClear}
+      >
+        {$i18n.t('Clear')}
+      </button>
       <button
         class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md"
         on:click={handleClose}
