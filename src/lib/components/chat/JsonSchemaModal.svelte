@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { getContext } from 'svelte';
   import type { Writable } from 'svelte/store';
   import type { i18n as i18nType } from 'i18next';
+  import Modal from '../common/Modal.svelte';
   
   const i18n: Writable<i18nType> = getContext('i18n');
   const dispatch = createEventDispatcher();
@@ -19,6 +20,11 @@
   // Debug logs for initialization
   console.log('JsonSchemaModal initialized with schema:', jsonSchema);
   console.log('JsonSchemaModal initialized with chatId:', chatId);
+  
+  // Clean up on component destroy
+  onDestroy(() => {
+    document.body.classList.remove('modal-open');
+  });
   
   // Load schema from localStorage if available and not already provided
   $: {
@@ -107,12 +113,6 @@
     dispatch('close');
   }
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      handleClose();
-    }
-  }
-
   // When the modal is shown, check if there's a schema in localStorage
   $: if (show) {
     // First try to load from chat-specific storage
@@ -157,27 +157,16 @@
 }`;
 </script>
 
-<div 
-  class={`fixed inset-0 z-50 flex items-center justify-center ${show ? '' : 'hidden'}`}
-  on:keydown={handleKeydown}
->
-  <div 
-    class="absolute inset-0 bg-black/50" 
-    on:click={handleClose}
-    on:keydown={(e) => e.key === 'Enter' && handleClose()}
-    role="button"
-    tabindex="0"
-    aria-label="Close modal"
-  ></div>
-  <div class="relative bg-gray-900 rounded-lg shadow-lg w-full max-w-2xl p-6 max-h-[80vh] overflow-auto">
-    <h2 class="text-xl font-bold mb-4">{$i18n.t('JSON Schema for Structured Output')}</h2>
+<Modal bind:show size="md" className="bg-gray-900 rounded-md">
+  <div class="p-6">
+    <h2 class="text-xl font-bold mb-4 text-white">{$i18n.t('JSON Schema for Structured Output')}</h2>
     
     <div class="mb-4">
       <p class="text-sm text-gray-400 mb-2">
         {$i18n.t('Enter a JSON schema to format the model response. This will be sent to Ollama using the format parameter.')}
       </p>
       <textarea
-        class="w-full h-64 bg-gray-800 border border-gray-700 rounded-md p-2 font-mono text-sm"
+        class="w-full h-64 bg-gray-800 border border-gray-700 rounded-md p-2 font-mono text-sm text-white"
         bind:value={jsonSchema}
         on:input={(e) => {
           const result = validateJson(e.currentTarget.value);
@@ -193,19 +182,19 @@
     
     <div class="flex justify-end space-x-2">
       <button
-        class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-md"
+        class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-md text-white"
         on:click={handleClear}
       >
         {$i18n.t('Clear')}
       </button>
       <button
-        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md"
+        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-white"
         on:click={handleClose}
       >
         {$i18n.t('Cancel')}
       </button>
       <button
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-md text-white disabled:opacity-50 disabled:cursor-not-allowed"
         on:click={handleSave}
         disabled={!isValid}
       >
@@ -213,4 +202,4 @@
       </button>
     </div>
   </div>
-</div> 
+</Modal> 
