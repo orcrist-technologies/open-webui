@@ -486,6 +486,13 @@
 		chatInput?.focus();
 
 		chats.subscribe(() => {});
+
+		// Load global JSON schema if available
+		const globalSchema = localStorage.getItem('ollama-json-schema');
+		if (globalSchema) {
+			jsonSchema = globalSchema;
+			console.log('Loaded global JSON schema:', jsonSchema);
+		}
 	});
 
 	onDestroy(() => {
@@ -1378,6 +1385,13 @@
 		saveSessionSelectedModels();
 
 		await sendPrompt(history, userPrompt, userMessageId, { newChat: true });
+
+		// Save JSON schema to localStorage for this chat
+		if (jsonSchema) {
+			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
+			localStorage.setItem('ollama-json-schema', jsonSchema);
+			console.log('Saved JSON schema for chat:', jsonSchema);
+		}
 	};
 
 	const sendPrompt = async (
@@ -1606,6 +1620,23 @@
 		
 		// Check if it's an Ollama model using owned_by property
 		const isOllamaModel = model?.owned_by === 'ollama';
+		
+		// Try to load JSON schema from localStorage if not already set
+		if (!jsonSchema) {
+			// First try chat-specific schema
+			const savedSchema = localStorage.getItem(`jsonSchema_${_chatId}`);
+			if (savedSchema) {
+				jsonSchema = savedSchema;
+				console.log('Loaded JSON schema from localStorage for chat:', savedSchema);
+			} else {
+				// Then try global schema
+				const globalSchema = localStorage.getItem('ollama-json-schema');
+				if (globalSchema) {
+					jsonSchema = globalSchema;
+					console.log('Loaded global JSON schema:', globalSchema);
+				}
+			}
+		}
 		
 		if (isOllamaModel && jsonSchema) {
 			try {
@@ -1999,19 +2030,14 @@
 		jsonSchema = event.detail.jsonSchema;
 		console.log('JSON schema updated:', jsonSchema);
 		
-		// Save to localStorage with chat-specific key
-		if ($chatId) {
-			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
-			console.log('Saved JSON schema to localStorage for chat:', $chatId, jsonSchema);
-		}
-		
-		// Also save to temp storage as a backup
+		// Save to both chat-specific and global storage
 		if (jsonSchema) {
-			localStorage.setItem('temp_jsonSchema', jsonSchema);
-			console.log('Saved JSON schema to temp storage:', jsonSchema);
+			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
+			localStorage.setItem('ollama-json-schema', jsonSchema);
+			console.log('Saved JSON schema to localStorage for chat:', $chatId, jsonSchema);
 		} else {
-			localStorage.removeItem('temp_jsonSchema');
-			console.log('Removed JSON schema from temp storage');
+			localStorage.removeItem(`jsonSchema_${$chatId}`);
+			localStorage.removeItem('ollama-json-schema');
 		}
 	};
 

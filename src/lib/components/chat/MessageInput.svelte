@@ -353,6 +353,13 @@
 		jsonSchema = event.detail.jsonSchema;
 		console.log('JSON schema updated in MessageInput:', jsonSchema);
 		
+		// Save to global storage for persistence
+		if (jsonSchema) {
+			localStorage.setItem('ollama-json-schema', jsonSchema);
+		} else {
+			localStorage.removeItem('ollama-json-schema');
+		}
+		
 		// Forward the event to parent components
 		dispatch('jsonSchemaChange', { jsonSchema });
 	}

@@ -29,13 +29,14 @@
         jsonSchemaInput = savedSchema;
         jsonSchema = savedSchema;
         dispatch('change', { jsonSchema: savedSchema });
+        dispatch('jsonSchemaChange', { jsonSchema: savedSchema });
       } else {
         console.log(`No saved JSON schema found in localStorage for chat ${chatId}`);
       }
     }
   }
   
-  function validateJson(json) {
+  function validateJson(json: string) {
     try {
       if (json.trim() === '') {
         return { isValid: true, error: '' };
@@ -43,27 +44,31 @@
       JSON.parse(json);
       return { isValid: true, error: '' };
     } catch (e) {
-      return { isValid: false, error: e.message };
+      const error = e instanceof Error ? e.message : String(e);
+      return { isValid: false, error };
     }
   }
   
   function handleSave() {
-    const { isValid: valid, error } = validateJson(jsonSchemaInput);
+    const { isValid: valid, error } = validateJson(jsonSchema);
     isValid = valid;
     errorMessage = error;
     
     if (isValid) {
-      jsonSchema = jsonSchemaInput;
-      
       // Save to localStorage with chat-specific key
       if (chatId) {
         console.log(`Saving JSON schema to localStorage for chat ${chatId}:`, jsonSchema);
         localStorage.setItem(`jsonSchema_${chatId}`, jsonSchema);
+        
+        // Also save to a global key for persistence across all chats
+        localStorage.setItem('ollama-json-schema', jsonSchema);
       } else {
-        console.log('No chatId available, cannot save JSON schema to localStorage');
+        console.log('No chatId available, saving to global schema only');
+        localStorage.setItem('ollama-json-schema', jsonSchema);
       }
       
       dispatch('change', { jsonSchema });
+      dispatch('jsonSchemaChange', { jsonSchema });
       dispatch('save', { jsonSchema });
       dispatch('close');
       show = false;
@@ -83,13 +88,32 @@
   }
 
   // When the modal is shown, check if there's a schema in localStorage
-  $: if (show && jsonSchema === '') {
-    // Try to load from temp storage if no schema is provided
-    const tempSchema = localStorage.getItem('temp_jsonSchema');
-    if (tempSchema) {
-      jsonSchema = tempSchema;
-      console.log('Loaded JSON schema from temp storage in modal:', tempSchema);
-      validateJson(jsonSchema);
+  $: if (show) {
+    // First try to load from chat-specific storage
+    if (chatId) {
+      const savedSchema = localStorage.getItem(`jsonSchema_${chatId}`);
+      if (savedSchema) {
+        jsonSchema = savedSchema;
+        jsonSchemaInput = savedSchema;
+        console.log('Loaded JSON schema from chat-specific storage:', savedSchema);
+      }
+    }
+    
+    // If no chat-specific schema, try the global schema
+    if (!jsonSchema) {
+      const globalSchema = localStorage.getItem('ollama-json-schema');
+      if (globalSchema) {
+        jsonSchema = globalSchema;
+        jsonSchemaInput = globalSchema;
+        console.log('Loaded JSON schema from global storage:', globalSchema);
+      }
+    }
+    
+    // Validate the schema
+    if (jsonSchema) {
+      const validation = validateJson(jsonSchema);
+      isValid = validation.isValid;
+      errorMessage = validation.error;
     }
   }
 
@@ -129,7 +153,11 @@
       <textarea
         class="w-full h-64 bg-gray-800 border border-gray-700 rounded-md p-2 font-mono text-sm"
         bind:value={jsonSchema}
-        on:input={validateJson}
+        on:input={(e) => {
+          const result = validateJson(e.currentTarget.value);
+          isValid = result.isValid;
+          errorMessage = result.error;
+        }}
         placeholder={placeholderSchema}
       ></textarea>
       {#if !isValid}
