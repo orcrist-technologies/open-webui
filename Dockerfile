@@ -26,12 +26,17 @@ ARG BUILD_HASH
 
 WORKDIR /app
 
+# First copy package files
 COPY package.json package-lock.json ./
-RUN npm ci
 
+# Then copy all other files before running the build
 COPY . .
 ENV APP_BUILD_HASH=${BUILD_HASH}
-RUN npm run build
+
+# Now run the build with increased memory limit
+RUN --mount=type=cache,target=/app/node_modules,id=node_modules \
+    npm ci && \
+    NODE_OPTIONS=--max_old_space_size=4096 npm run build
 
 ######## WebUI backend ########
 FROM python:3.11-slim-bookworm AS base

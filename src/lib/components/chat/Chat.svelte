@@ -85,6 +85,7 @@
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
 	import Spinner from '../common/Spinner.svelte';
+	import JsonSchemaModal from './JsonSchemaModal.svelte';
 
 	export let chatIdProp = '';
 
@@ -97,6 +98,7 @@
 	let autoScroll = true;
 	let processing = '';
 	let messagesContainerElement: HTMLDivElement;
+	let jsonSchema = '';
 
 	let navbarElement;
 
@@ -159,6 +161,7 @@
 						selectedToolIds = input.selectedToolIds;
 						webSearchEnabled = input.webSearchEnabled;
 						imageGenerationEnabled = input.imageGenerationEnabled;
+						jsonSchema = input.jsonSchema || '';
 					} catch (e) {}
 				}
 
@@ -400,11 +403,39 @@
 			chatIdUnsubscriber = chatId.subscribe(async (value) => {
 				if (!value) {
 					await initNewChat();
+				} else {
+					// Load JSON schema from localStorage when chat ID changes
+					const savedSchema = localStorage.getItem(`jsonSchema_${value}`);
+					if (savedSchema) {
+						jsonSchema = savedSchema;
+						console.log('Loaded JSON schema from localStorage for chat:', value, jsonSchema);
+					} else {
+						// Try to load from temp storage as fallback
+						const tempSchema = localStorage.getItem('temp_jsonSchema');
+						if (tempSchema) {
+							jsonSchema = tempSchema;
+							console.log('Loaded JSON schema from temp storage:', jsonSchema);
+						}
+					}
 				}
 			});
 		} else {
 			if ($temporaryChatEnabled) {
 				await goto('/');
+			} else {
+				// Load JSON schema from localStorage for the current chat
+				const savedSchema = localStorage.getItem(`jsonSchema_${$chatId}`);
+				if (savedSchema) {
+					jsonSchema = savedSchema;
+					console.log('Loaded JSON schema from localStorage for current chat:', $chatId, jsonSchema);
+				} else {
+					// Try to load from temp storage as fallback
+					const tempSchema = localStorage.getItem('temp_jsonSchema');
+					if (tempSchema) {
+						jsonSchema = tempSchema;
+						console.log('Loaded JSON schema from temp storage:', jsonSchema);
+					}
+				}
 			}
 		}
 
@@ -416,12 +447,18 @@
 				selectedToolIds = input.selectedToolIds;
 				webSearchEnabled = input.webSearchEnabled;
 				imageGenerationEnabled = input.imageGenerationEnabled;
+				// Don't override jsonSchema if it was already loaded from localStorage
+				if (!jsonSchema && input.jsonSchema) {
+					jsonSchema = input.jsonSchema;
+					console.log('Loaded JSON schema from chat input:', jsonSchema);
+				}
 			} catch (e) {
 				prompt = '';
 				files = [];
 				selectedToolIds = [];
 				webSearchEnabled = false;
 				imageGenerationEnabled = false;
+				// Don't clear jsonSchema if it was already loaded from localStorage
 			}
 		}
 
@@ -714,6 +751,7 @@
 
 		chatFiles = [];
 		params = {};
+		jsonSchema = '';
 
 		if ($page.url.searchParams.get('youtube')) {
 			uploadYoutubeTranscription(
@@ -818,6 +856,22 @@
 					history.messages[history.currentId].done = true;
 				}
 				await tick();
+
+				// Load JSON schema from localStorage if available for this chat
+				const savedSchema = localStorage.getItem(`jsonSchema_${$chatId}`);
+				if (savedSchema) {
+					console.log('Loading saved JSON schema from localStorage for chat:', $chatId);
+					jsonSchema = savedSchema;
+				} else {
+					// Try to load from temporary storage
+					const tempSchema = localStorage.getItem('temp_jsonSchema');
+					if (tempSchema) {
+						console.log('Loading temporary JSON schema for chat:', $chatId);
+						jsonSchema = tempSchema;
+						// Save it permanently for this chat
+						localStorage.setItem(`jsonSchema_${$chatId}`, tempSchema);
+					}
+				}
 
 				return true;
 			} else {
@@ -1541,85 +1595,120 @@
 			}))
 			.filter((message) => message?.role === 'user' || message?.content?.trim());
 
+		// Add format parameter for Ollama models if jsonSchema is provided
+		let formatParam = undefined;
+		
+		// Debug model information
+		console.log('DEBUG - Model object:', model);
+		console.log('DEBUG - Model owned_by:', model?.owned_by);
+		console.log('DEBUG - JSON Schema provided:', jsonSchema ? 'Yes' : 'No');
+		console.log('DEBUG - JSON Schema content:', jsonSchema);
+		
+		// Check if it's an Ollama model using owned_by property
+		const isOllamaModel = model?.owned_by === 'ollama';
+		
+		if (isOllamaModel && jsonSchema) {
+			try {
+				formatParam = JSON.parse(jsonSchema);
+				console.log('JSON Schema parsed successfully:', formatParam);
+			} catch (e) {
+				console.error('Invalid JSON schema:', e);
+			}
+		}
+
+		// Create a copy of the request body for logging
+		const requestBody = {
+			stream: stream,
+			model: model.id,
+			messages: messages,
+			// Format parameter should be at the top level of the request body for Ollama models
+			...(isOllamaModel && formatParam ? { format: formatParam } : {}),
+			params: {
+				...$settings?.params,
+				...params,
+				
+				keep_alive: $settings.keepAlive ?? undefined,
+				stop:
+					(params?.stop ?? $settings?.params?.stop ?? undefined)
+						? (params?.stop.split(',').map((token) => token.trim()) ?? $settings.params.stop).map(
+								(str) => decodeURIComponent(JSON.parse('"' + str.replace(/\"/g, '\\"') + '"'))
+							)
+						: undefined
+			},
+
+			files: (files?.length ?? 0) > 0 ? files : undefined,
+			tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
+
+			features: {
+				image_generation:
+					$config?.features?.enable_image_generation &&
+					($user.role === 'admin' || $user?.permissions?.features?.image_generation)
+						? imageGenerationEnabled
+						: false,
+				code_interpreter:
+					$config?.features?.enable_code_interpreter &&
+					($user.role === 'admin' || $user?.permissions?.features?.code_interpreter)
+						? codeInterpreterEnabled
+						: false,
+				web_search:
+					$config?.features?.enable_web_search &&
+					($user.role === 'admin' || $user?.permissions?.features?.web_search)
+						? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
+						: false
+			},
+			variables: {
+				...getPromptVariables(
+					$user.name,
+					$settings?.userLocation
+						? await getAndUpdateUserLocation(localStorage.token).catch((err) => {
+								console.error(err);
+								return undefined;
+							})
+						: undefined
+				)
+			},
+
+			model_item: $models.find((m) => m.id === model.id),
+
+			session_id: $socket?.id,
+			chat_id: $chatId,
+			id: responseMessageId,
+
+			...(!$temporaryChatEnabled &&
+			(messages.length == 1 ||
+				(messages.length == 2 &&
+					messages.at(0)?.role === 'system' &&
+					messages.at(1)?.role === 'user')) &&
+			(selectedModels[0] === model.id || atSelectedModel !== undefined)
+				? {
+						background_tasks: {
+							title_generation: $settings?.title?.auto ?? true,
+							tags_generation: $settings?.autoTags ?? true
+						}
+					}
+				: {}),
+
+			...(stream && (model.info?.meta?.capabilities?.usage ?? false)
+				? {
+						stream_options: {
+							include_usage: true
+						}
+					}
+				: {})
+		};
+		
+		console.log('Model provider:', model.provider);
+		console.log('JSON Schema provided:', jsonSchema ? 'Yes' : 'No');
+		console.log('Format parameter included:', formatParam ? 'Yes' : 'No');
+		console.log('Format parameter value:', formatParam);
+		console.log('Is Ollama model:', isOllamaModel ? 'Yes' : 'No');
+		console.log('Model owned_by:', model?.owned_by);
+		console.log('Request body:', JSON.stringify(requestBody));
+		console.log('DEBUG - Complete request body:', JSON.stringify(requestBody, null, 2));
+		
 		const res = await generateOpenAIChatCompletion(
 			localStorage.token,
-			{
-				stream: stream,
-				model: model.id,
-				messages: messages,
-				params: {
-					...$settings?.params,
-					...params,
-
-					format: $settings.requestFormat ?? undefined,
-					keep_alive: $settings.keepAlive ?? undefined,
-					stop:
-						(params?.stop ?? $settings?.params?.stop ?? undefined)
-							? (params?.stop.split(',').map((token) => token.trim()) ?? $settings.params.stop).map(
-									(str) => decodeURIComponent(JSON.parse('"' + str.replace(/\"/g, '\\"') + '"'))
-								)
-							: undefined
-				},
-
-				files: (files?.length ?? 0) > 0 ? files : undefined,
-				tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
-
-				features: {
-					image_generation:
-						$config?.features?.enable_image_generation &&
-						($user.role === 'admin' || $user?.permissions?.features?.image_generation)
-							? imageGenerationEnabled
-							: false,
-					code_interpreter:
-						$config?.features?.enable_code_interpreter &&
-						($user.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-							? codeInterpreterEnabled
-							: false,
-					web_search:
-						$config?.features?.enable_web_search &&
-						($user.role === 'admin' || $user?.permissions?.features?.web_search)
-							? webSearchEnabled || ($settings?.webSearch ?? false) === 'always'
-							: false
-				},
-				variables: {
-					...getPromptVariables(
-						$user.name,
-						$settings?.userLocation
-							? await getAndUpdateUserLocation(localStorage.token).catch((err) => {
-									console.error(err);
-									return undefined;
-								})
-							: undefined
-					)
-				},
-				model_item: $models.find((m) => m.id === model.id),
-
-				session_id: $socket?.id,
-				chat_id: $chatId,
-				id: responseMessageId,
-
-				...(!$temporaryChatEnabled &&
-				(messages.length == 1 ||
-					(messages.length == 2 &&
-						messages.at(0)?.role === 'system' &&
-						messages.at(1)?.role === 'user')) &&
-				(selectedModels[0] === model.id || atSelectedModel !== undefined)
-					? {
-							background_tasks: {
-								title_generation: $settings?.title?.auto ?? true,
-								tags_generation: $settings?.autoTags ?? true
-							}
-						}
-					: {}),
-
-				...(stream && (model.info?.meta?.capabilities?.usage ?? false)
-					? {
-							stream_options: {
-								include_usage: true
-							}
-						}
-					: {})
-			},
+			requestBody,
 			`${WEBUI_BASE_URL}/api`
 		).catch((error) => {
 			toast.error(`${error}`);
@@ -1634,7 +1723,7 @@
 			return null;
 		});
 
-		console.log(res);
+		console.log('API response:', res);
 
 		if (res) {
 			taskId = res.task_id;
@@ -1847,12 +1936,22 @@
 		}
 		await tick();
 
+		// Clear any saved JSON schema for the new chat
+		if ($chatId) {
+			localStorage.removeItem(`jsonSchema_${$chatId}`);
+		}
+
 		return _chatId;
 	};
 
 	const saveChatHandler = async (_chatId, history) => {
 		if ($chatId == _chatId) {
 			if (!$temporaryChatEnabled) {
+				// Save JSON schema to localStorage for this chat
+				if (jsonSchema) {
+					localStorage.setItem(`jsonSchema_${_chatId}`, jsonSchema);
+				}
+				
 				chat = await updateChatById(localStorage.token, _chatId, {
 					models: selectedModels,
 					history: history,
@@ -1865,6 +1964,82 @@
 			}
 		}
 	};
+
+	// Save chat input
+	const saveChatInput = () => {
+		if ($chatId) {
+			const inputData = {
+				prompt,
+				files,
+				selectedToolIds,
+				imageGenerationEnabled,
+				webSearchEnabled,
+				codeInterpreterEnabled,
+				jsonSchema // Include jsonSchema in the saved input data
+			};
+			
+			localStorage.setItem(
+				`chat-input-${$chatId}`,
+				JSON.stringify(inputData)
+			);
+			
+			// Save JSON schema to localStorage with chat-specific key
+			if (jsonSchema) {
+				localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
+				console.log('Saved JSON schema to localStorage for chat:', $chatId, jsonSchema);
+			} else {
+				localStorage.removeItem(`jsonSchema_${$chatId}`);
+				console.log('Removed JSON schema from localStorage for chat:', $chatId);
+			}
+		}
+	};
+
+	// Handle JSON schema changes
+	const handleJsonSchemaChange = (event) => {
+		jsonSchema = event.detail.jsonSchema;
+		console.log('JSON schema updated:', jsonSchema);
+		
+		// Save to localStorage with chat-specific key
+		if ($chatId) {
+			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
+			console.log('Saved JSON schema to localStorage for chat:', $chatId, jsonSchema);
+		}
+		
+		// Also save to temp storage as a backup
+		if (jsonSchema) {
+			localStorage.setItem('temp_jsonSchema', jsonSchema);
+			console.log('Saved JSON schema to temp storage:', jsonSchema);
+		} else {
+			localStorage.removeItem('temp_jsonSchema');
+			console.log('Removed JSON schema from temp storage');
+		}
+	};
+
+	let showJsonSchemaModal = false;
+
+	// Load JSON schema from localStorage when chat is loaded
+	$: {
+		if (chatId) {
+			const savedSchema = localStorage.getItem(`jsonSchema_${chatId}`);
+			if (savedSchema) {
+				console.log(`Loading JSON schema from localStorage for chat ${chatId}:`, savedSchema);
+				jsonSchema = savedSchema;
+			}
+		}
+	}
+
+	// Reset JSON schema when starting a new chat
+	$: {
+		if (!$chatId || $chatId === '') {
+			console.log('New chat detected, resetting JSON schema');
+			jsonSchema = '';
+			if (chatId) {
+				localStorage.removeItem(`jsonSchema_${$chatId}`);
+			}
+		}
+	}
+
+	// Removing duplicate function - already defined at line 1997
 </script>
 
 <svelte:head>
@@ -2030,12 +2205,13 @@
 								bind:imageGenerationEnabled
 								bind:codeInterpreterEnabled
 								bind:webSearchEnabled
+								bind:jsonSchema
 								bind:atSelectedModel
 								transparentBackground={$settings?.backgroundImageUrl ?? false}
 								{stopResponse}
 								{createMessagePair}
 								onChange={(input) => {
-									if (input.prompt) {
+									if (input.prompt || input.jsonSchema) {
 										localStorage.setItem(`chat-input-${$chatId}`, JSON.stringify(input));
 									} else {
 										localStorage.removeItem(`chat-input-${$chatId}`);
@@ -2062,6 +2238,7 @@
 										);
 									}
 								}}
+								on:jsonSchemaChange={handleJsonSchemaChange}
 							/>
 
 							<div
@@ -2082,6 +2259,7 @@
 								bind:imageGenerationEnabled
 								bind:codeInterpreterEnabled
 								bind:webSearchEnabled
+								bind:jsonSchema
 								bind:atSelectedModel
 								transparentBackground={$settings?.backgroundImageUrl ?? false}
 								{stopResponse}
@@ -2093,6 +2271,8 @@
 										await uploadWeb(data);
 									} else if (type === 'youtube') {
 										await uploadYoutubeTranscription(data);
+									} else if (type === 'google-drive') {
+										await uploadGoogleDriveFile(data);
 									}
 								}}
 								on:submit={async (e) => {
@@ -2105,6 +2285,7 @@
 										);
 									}
 								}}
+								on:jsonSchemaChange={handleJsonSchemaChange}
 							/>
 						</div>
 					{/if}
@@ -2141,3 +2322,18 @@
 		</div>
 	{/if}
 </div>
+
+<JsonSchemaModal
+	bind:show={showJsonSchemaModal}
+	bind:jsonSchema
+	chatId={chatId}
+	on:change={handleJsonSchemaChange}
+	on:save={() => {
+		// Save JSON schema to localStorage with chat-specific key
+		if ($chatId) {
+			localStorage.setItem(`jsonSchema_${$chatId}`, jsonSchema);
+			console.log('Saved JSON schema to localStorage for chat:', $chatId, jsonSchema);
+		}
+	}}
+	on:close={() => (showJsonSchemaModal = false)}
+/>

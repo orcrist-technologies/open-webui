@@ -45,7 +45,10 @@
 	import PhotoSolid from '../icons/PhotoSolid.svelte';
 	import Photo from '../icons/Photo.svelte';
 	import CommandLine from '../icons/CommandLine.svelte';
+	import JsonSchema from '../icons/JsonSchema.svelte';
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
+
+	import JsonSchemaModal from './JsonSchemaModal.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -67,6 +70,7 @@
 
 	export let prompt = '';
 	export let files = [];
+	export let jsonSchema = '';
 
 	export let selectedToolIds = [];
 
@@ -79,7 +83,9 @@
 		files,
 		selectedToolIds,
 		imageGenerationEnabled,
-		webSearchEnabled
+		webSearchEnabled,
+		codeInterpreterEnabled,
+		jsonSchema
 	});
 
 	let loaded = false;
@@ -339,6 +345,17 @@
 			dropzoneElement?.removeEventListener('dragleave', onDragLeave);
 		}
 	});
+
+	let showJsonSchemaModal = false;
+
+	// Add this function to handle JSON schema changes
+	function handleJsonSchemaChange(event) {
+		jsonSchema = event.detail.jsonSchema;
+		console.log('JSON schema updated in MessageInput:', jsonSchema);
+		
+		// Forward the event to parent components
+		dispatch('jsonSchemaChange', { jsonSchema });
+	}
 </script>
 
 <FilesOverlay show={dragged} />
@@ -1199,7 +1216,7 @@
 																? 'bg-gray-100 dark:bg-gray-500/20 text-gray-600 dark:text-gray-400'
 																: 'bg-transparent text-gray-600 dark:text-gray-300 border-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 '}"
 														>
-															<Photo className="size-5" strokeWidth="1.75" />
+															<PhotoSolid className="size-5" />
 															<span
 																class="hidden @sm:block whitespace-nowrap overflow-hidden text-ellipsis translate-y-[0.5px] mr-0.5"
 																>{$i18n.t('Image')}</span
@@ -1226,6 +1243,22 @@
 														</button>
 													</Tooltip>
 												{/if}
+
+												<Tooltip content={$i18n.t('Add JSON Schema for structured output')} placement="top">
+													<button
+														on:click|preventDefault={() => (showJsonSchemaModal = true)}
+														type="button"
+														class="px-1.5 @sm:px-2.5 py-1.5 flex gap-1.5 items-center text-sm rounded-full font-medium transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {jsonSchema
+															? 'bg-purple-100 dark:bg-purple-500/20 text-purple-500 dark:text-purple-400'
+															: 'bg-transparent text-gray-600 dark:text-gray-300 border-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 '}"
+													>
+														<JsonSchema className="size-5" strokeWidth="1.75" />
+														<span
+															class="hidden @sm:block whitespace-nowrap overflow-hidden text-ellipsis translate-y-[0.5px] mr-0.5"
+															>{$i18n.t('Schema')}</span
+														>
+													</button>
+												</Tooltip>
 											{/if}
 										</div>
 									</div>
@@ -1412,3 +1445,24 @@
 		</div>
 	</div>
 {/if}
+
+<JsonSchemaModal
+	bind:show={showJsonSchemaModal}
+	bind:jsonSchema={jsonSchema}
+	chatId={history?.currentId}
+	on:save={() => {
+		onChange({
+			prompt,
+			files,
+			selectedToolIds,
+			imageGenerationEnabled,
+			webSearchEnabled,
+			codeInterpreterEnabled,
+			jsonSchema
+		});
+	}}
+	on:close={() => {
+		showJsonSchemaModal = false;
+	}}
+	on:jsonSchemaChange={handleJsonSchemaChange}
+/>
