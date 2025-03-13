@@ -16,6 +16,7 @@
   let jsonSchemaInput = jsonSchema;
   let isValid = true;
   let errorMessage = '';
+  let previousChatId = '';
   
   // Debug logs for initialization
   console.log('JsonSchemaModal initialized with schema:', jsonSchema);
@@ -25,6 +26,45 @@
   onDestroy(() => {
     document.body.classList.remove('modal-open');
   });
+  
+  // Watch for changes in chatId to clear schema when a new chat is created
+  $: if (chatId && chatId !== previousChatId) {
+    console.log(`Chat ID changed from ${previousChatId} to ${chatId}`);
+    
+    // If this is a new chat (not just initial load), clear the schema
+    if (previousChatId !== '') {
+      console.log('New chat detected, clearing JSON schema');
+      jsonSchema = '';
+      jsonSchemaInput = '';
+      
+      // Notify parent components
+      dispatch('change', { jsonSchema: '' });
+      dispatch('jsonSchemaChange', { jsonSchema: '' });
+      
+      // Clear localStorage - be aggressive in removing all schema data
+      localStorage.removeItem(`jsonSchema_${chatId}`);
+      localStorage.removeItem(`jsonSchema_${previousChatId}`);
+      localStorage.removeItem('ollama-json-schema');
+      localStorage.removeItem('temp_jsonSchema');
+      
+      // Clear any other JSON schema entries
+      const allKeys = Object.keys(localStorage);
+      for (const key of allKeys) {
+        if (key.startsWith('jsonSchema_')) {
+          console.log('Removing schema for key:', key);
+          localStorage.removeItem(key);
+        }
+      }
+    }
+    
+    previousChatId = chatId;
+  }
+  
+  // Also watch for changes in jsonSchema from parent component
+  $: if (jsonSchema !== jsonSchemaInput) {
+    console.log('jsonSchema changed externally:', jsonSchema);
+    jsonSchemaInput = jsonSchema;
+  }
   
   // Load schema from localStorage if available and not already provided
   $: {
@@ -122,6 +162,10 @@
         jsonSchema = savedSchema;
         jsonSchemaInput = savedSchema;
         console.log('Loaded JSON schema from chat-specific storage:', savedSchema);
+      } else {
+        // If no schema found for this chat, reset both values
+        jsonSchema = '';
+        jsonSchemaInput = '';
       }
     }
     
@@ -132,6 +176,10 @@
         jsonSchema = globalSchema;
         jsonSchemaInput = globalSchema;
         console.log('Loaded JSON schema from global storage:', globalSchema);
+      } else {
+        // If no global schema found, reset both values
+        jsonSchema = '';
+        jsonSchemaInput = '';
       }
     }
     

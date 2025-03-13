@@ -360,10 +360,28 @@
 			// Clear the schema if empty
 			jsonSchema = '';
 			localStorage.removeItem('ollama-json-schema');
+			
+			// Also clear any chat-specific schemas
+			if (history?.currentId) {
+				localStorage.removeItem(`jsonSchema_${history.currentId}`);
+			}
+			
+			console.log('JSON schema cleared in MessageInput');
 		}
 		
-		// Forward the event to parent components
+		// Dispatch event to notify parent components
 		dispatch('jsonSchemaChange', { jsonSchema });
+		
+		// Update the onChange callback
+		onChange({
+			prompt,
+			files,
+			selectedToolIds,
+			imageGenerationEnabled,
+			webSearchEnabled,
+			codeInterpreterEnabled,
+			jsonSchema
+		});
 	}
 </script>
 

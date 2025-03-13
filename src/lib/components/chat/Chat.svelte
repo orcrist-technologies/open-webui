@@ -402,8 +402,23 @@
 		if (!$chatId) {
 			chatIdUnsubscriber = chatId.subscribe(async (value) => {
 				if (!value) {
+					// Clear JSON schema before initializing new chat
+					jsonSchema = '';
+					localStorage.removeItem('ollama-json-schema');
+					localStorage.removeItem('temp_jsonSchema');
+					
+					// Clear any previous chat-specific schema
+					const previousChatId = localStorage.getItem('previous_chat_id');
+					if (previousChatId) {
+						localStorage.removeItem(`jsonSchema_${previousChatId}`);
+					}
+					
+					console.log('Cleared JSON schema before initializing new chat');
 					await initNewChat();
 				} else {
+					// Store current chat ID for future reference
+					localStorage.setItem('previous_chat_id', value);
+					
 					// Load JSON schema from localStorage when chat ID changes
 					const savedSchema = localStorage.getItem(`jsonSchema_${value}`);
 					if (savedSchema) {
@@ -758,7 +773,32 @@
 
 		chatFiles = [];
 		params = {};
+		
+		// Explicitly clear the JSON schema
 		jsonSchema = '';
+		console.log('Cleared JSON schema for new chat');
+		
+		// Remove from localStorage (both global and any chat-specific entries)
+		localStorage.removeItem('ollama-json-schema');
+		
+		// Also clear any temporary schema
+		localStorage.removeItem('temp_jsonSchema');
+		
+		// Clear any previous chat-specific schema
+		const allKeys = Object.keys(localStorage);
+		for (const key of allKeys) {
+			if (key.startsWith('jsonSchema_')) {
+				console.log('Removing schema for key:', key);
+				localStorage.removeItem(key);
+			}
+		}
+		
+		// Clear the previous chat ID reference
+		localStorage.removeItem('previous_chat_id');
+
+		if ($chatId) {
+			localStorage.removeItem(`jsonSchema_${$chatId}`);
+		}
 
 		if ($page.url.searchParams.get('youtube')) {
 			uploadYoutubeTranscription(
@@ -1976,6 +2016,9 @@
 		// Clear any saved JSON schema for the new chat
 		if ($chatId) {
 			localStorage.removeItem(`jsonSchema_${$chatId}`);
+			// Also clear the jsonSchema variable
+			jsonSchema = '';
+			console.log('Cleared JSON schema for new chat');
 		}
 
 		return _chatId;
@@ -2070,6 +2113,25 @@
 			jsonSchema = '';
 			if (chatId) {
 				localStorage.removeItem(`jsonSchema_${$chatId}`);
+			}
+		}
+	}
+
+	// Reset JSON schema when chatId is empty (new chat)
+	$: if ($chatId === '') {
+		jsonSchema = '';
+		console.log('Chat ID is empty, clearing JSON schema');
+		
+		// Clear from localStorage
+		localStorage.removeItem('ollama-json-schema');
+		localStorage.removeItem('temp_jsonSchema');
+		
+		// Clear any chat-specific schemas
+		const allKeys = Object.keys(localStorage);
+		for (const key of allKeys) {
+			if (key.startsWith('jsonSchema_')) {
+				console.log('Removing schema for key:', key);
+				localStorage.removeItem(key);
 			}
 		}
 	}
