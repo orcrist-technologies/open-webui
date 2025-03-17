@@ -153,6 +153,22 @@
 							? 'md:hidden'
 							: ''} cursor-pointer px-2 py-2 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-850 transition"
 						on:click={() => {
+							// Clear all JSON schema related localStorage items
+							console.log('New Chat button clicked, clearing all JSON schema data');
+							
+							// Clear from localStorage
+							localStorage.removeItem('ollama-json-schema');
+							localStorage.removeItem('temp_jsonSchema');
+							
+							// Clear any chat-specific schemas
+							const allKeys = Object.keys(localStorage);
+							for (const key of allKeys) {
+								if (key.startsWith('jsonSchema_')) {
+									console.log('Removing schema for key:', key);
+									localStorage.removeItem(key);
+								}
+							}
+							
 							initNewChat();
 						}}
 						aria-label="New Chat"

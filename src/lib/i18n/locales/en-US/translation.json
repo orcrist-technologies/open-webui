@@ -261,7 +261,7 @@
 	"Default": "",
 	"Default (Open AI)": "",
 	"Default (SentenceTransformers)": "",
-	"Default mode works with a wider range of models by calling tools once before execution. Native mode leverages the model’s built-in tool-calling capabilities, but requires the model to inherently support this feature.": "",
+	"Default mode works with a wider range of models by calling tools once before execution. Native mode leverages the model's built-in tool-calling capabilities, but requires the model to inherently support this feature.": "",
 	"Default Model": "",
 	"Default model updated": "",
 	"Default Models": "",
@@ -1142,7 +1142,7 @@
 	"WebUI will make requests to \"{{url}}/chat/completions\"": "",
 	"What are you trying to achieve?": "",
 	"What are you working on?": "",
-	"What’s New in": "",
+	"What's New in": "",
 	"When enabled, the model will respond to each chat message in real-time, generating a response as soon as the user sends a message. This mode is useful for live chat applications, but may impact performance on slower hardware.": "",
 	"wherever you are": "",
 	"Whisper (Local)": "",
@@ -1174,5 +1174,11 @@
 	"Your entire contribution will go directly to the plugin developer; Open WebUI does not take any percentage. However, the chosen funding platform might have its own fees.": "",
 	"Youtube": "",
 	"Youtube Language": "",
-	"Youtube Proxy URL": ""
+	"Youtube Proxy URL": "",
+	"Add JSON Schema": "Add JSON Schema",
+	"Add JSON Schema for structured output": "Add JSON Schema for structured output",
+	"JSON Schema for Structured Output": "JSON Schema for Structured Output",
+	"Enter a JSON schema to format the model response. This will be sent to Ollama using the format parameter.": "Enter a JSON schema to format the model response. This will be sent to Ollama using the format parameter.",
+	"JSON Schema added": "JSON Schema added",
+	"Schema": "Schema"
 }
